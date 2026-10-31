@@ -3477,7 +3477,18 @@ class MainActivity : AppCompatActivity() {
     private fun rebuild(reopenSettings: Boolean) {
         initHistory()
         buildUi()
+        refreshPaletteSurfaces()
         if (reopenSettings) showSettings()
+    }
+
+    // Reapply palette-dependent outlines after rebuilding the view hierarchy.
+    // Some overlay containers can retain the previous theme's stroke when
+    // Android restores focus during a live theme change.
+    private fun refreshPaletteSurfaces() {
+        val p = pal
+        if (::panel.isInitialized) panel.background = box(solidColor(), p.cAccent)
+        if (::qsBox.isInitialized) qsBox.background = box(solidColor(), p.cAccent)
+        if (::setBox.isInitialized) setBox.background = box(solidColor(), p.cAccent)
     }
 
     // ================= hidden apps =================

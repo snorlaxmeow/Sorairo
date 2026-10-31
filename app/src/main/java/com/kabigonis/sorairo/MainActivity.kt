@@ -2664,10 +2664,17 @@ class MainActivity : AppCompatActivity() {
     }
 
     @Suppress("DEPRECATION")
+    private var wifiScanReceiver: android.content.BroadcastReceiver? = null
+    private var wifiNetworkList: LinearLayout? = null
+    private var wifiScanStatus: TextView? = null
+
+    @Suppress("DEPRECATION")
     private fun showWifiPanel() {
         val p = pal
         val wifi = applicationContext.getSystemService(WIFI_SERVICE) as WifiManager
-        val connected = netLabel().startsWith("wifi")
+        val cm = getSystemService(CONNECTIVITY_SERVICE) as ConnectivityManager
+        val hasWifi = cm.getNetworkCapabilities(cm.activeNetwork)
+            ?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) == true
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(18), dp(16), dp(18), dp(14))
@@ -2683,61 +2690,98 @@ class MainActivity : AppCompatActivity() {
             background = box(p.cSel, p.cAccent)
         }
         val currentName = try {
-            @Suppress("DEPRECATION")
-            wifi.connectionInfo.ssid?.removePrefix("\"")?.removeSuffix("\"")
-                ?.takeIf { it.isNotBlank() && it != "<unknown ssid>" } ?: "Not connected"
-        } catch (_: Exception) { "Not connected" }
+            wifi.connectionInfo.ssid?.removePrefix("\\\"")?.removeSuffix("\\\"")
+                ?.takeIf { it.isNotBlank() && it != "<unknown ssid>" } ?: if (hasWifi) "Connected network" else "Not connected"
+        } catch (_: Exception) { if (hasWifi) "Connected network" else "Not connected" }
         current.addView(txt(14f, p.cFg, currentName))
-        current.addView(txt(11f, p.cAccent, if (connected) "connected" else "not connected").apply {
+        current.addView(txt(11f, p.cAccent, if (hasWifi) "connected" else "not connected").apply {
             setPadding(0, dp(3), 0, 0)
         })
         root.addView(current)
 
-        val networkList = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        val list = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        wifiNetworkList = list
+        val status = txt(10f, p.cDim, "SCANNING…")
+        wifiScanStatus = status
         root.addView(txt(10f, p.cDim, "NEARBY").apply { setPadding(0, dp(14), 0, dp(6)) })
-        root.addView(networkList)
+        root.addView(list)
+        root.addView(status.apply { setPadding(0, dp(4), 0, dp(4)) })
 
-        fun renderNetworks() {
-            networkList.removeAllViews()
+        fun renderNetworks(message: String? = null) {
+            list.removeAllViews()
             val permitted = checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
             if (!permitted) {
-                networkList.addView(txt(12f, p.cDim, "Location permission is required by Android to scan nearby Wi-Fi networks.")
-                    .apply { setPadding(0, dp(8), 0, dp(10)) })
+                status.text = "LOCATION PERMISSION REQUIRED"
+                list.addView(txt(12f, p.cDim, "Allow location access to show nearby Wi-Fi names.")
+                    .apply { setPadding(0, dp(8), 0, dp(8)) })
                 return
             }
-            val results = try {
-                wifi.scanResults
-            } catch (_: Exception) { emptyList<ScanResult>() }
-            val unique = results.filter { it.SSID.isNotBlank() }.distinctBy { it.SSID }
-                .sortedByDescending { it.level }
-            if (unique.isEmpty()) {
-                networkList.addView(txt(12f, p.cDim, "No networks found. Try refreshing, and make sure Location is enabled.")
-                    .apply { setPadding(0, dp(8), 0, dp(10)) })
+            val locationEnabled = if (Build.VERSION.SDK_INT >= 28) {
+                (getSystemService(LOCATION_SERVICE) as android.location.LocationManager).isLocationEnabled
+            } else {
+                Settings.Secure.getInt(contentResolver, Settings.Secure.LOCATION_MODE, Settings.Secure.LOCATION_MODE_OFF) != Settings.Secure.LOCATION_MODE_OFF
             }
-            unique.take(12).forEach { result ->
-                val row = LinearLayout(this).apply {
-                    orientation = LinearLayout.HORIZONTAL
-                    gravity = Gravity.CENTER_VERTICAL
-                    setPadding(dp(10), dp(10), dp(8), dp(10))
-                    background = box(p.cBg, p.cDim)
-                    setOnClickListener {
-                        wifiDialog?.dismiss()
-                        openSystem(Settings.ACTION_WIFI_SETTINGS)
+            if (!locationEnabled) {
+                status.text = "DEVICE LOCATION IS OFF"
+                list.addView(txt(12f, p.cDim, "Turn on Location in Android settings, then refresh.")
+                    .apply { setPadding(0, dp(8), 0, dp(8)) })
+                return
+            }
+            val results = try { wifi.scanResults } catch (_: Exception) { emptyList<ScanResult>() }
+            val unique = results.filter { it.SSID.isNotBlank() && it.SSID != "<unknown ssid>" }
+                .distinctBy { it.SSID }.sortedByDescending { it.level }
+            if (unique.isEmpty()) {
+                status.text = message ?: "NO RESULTS YET"
+                list.addView(txt(12f, p.cDim, "No networks returned by Android yet. Try Refresh in a moment.")
+                    .apply { setPadding(0, dp(8), 0, dp(8)) })
+            } else {
+                status.text = "${unique.size} NETWORKS FOUND"
+                unique.take(12).forEach { result ->
+                    val row = LinearLayout(this).apply {
+                        orientation = LinearLayout.HORIZONTAL
+                        gravity = Gravity.CENTER_VERTICAL
+                        setPadding(dp(10), dp(9), dp(8), dp(9))
+                        background = box(p.cBg, p.cDim)
+                        setOnClickListener {
+                            wifiDialog?.dismiss()
+                            openSystem(Settings.ACTION_WIFI_SETTINGS)
+                        }
                     }
+                    val info = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+                    info.addView(txt(13f, p.cFg, result.SSID))
+                    val secure = result.capabilities.contains("WPA") || result.capabilities.contains("WEP")
+                    info.addView(txt(10f, p.cDim, if (secure) "secured · open Android to connect" else "open · open Android to connect")
+                        .apply { setPadding(0, dp(2), 0, 0) })
+                    row.addView(info, LinearLayout.LayoutParams(0, -2, 1f))
+                    row.addView(txt(11f, p.cAccent, "${result.level} dBm"))
+                    list.addView(row)
+                    list.addView(View(this).apply { layoutParams = LinearLayout.LayoutParams(1, dp(1)) })
                 }
-                val info = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-                info.addView(txt(13f, p.cFg, result.SSID))
-                val secure = result.capabilities.contains("WPA") || result.capabilities.contains("WEP")
-                info.addView(txt(10f, p.cDim, if (secure) "secured · tap to connect in Android settings" else "open · tap to connect in Android settings")
-                    .apply { setPadding(0, dp(2), 0, 0) })
-                row.addView(info, LinearLayout.LayoutParams(0, -2, 1f))
-                row.addView(txt(11f, p.cAccent, "${result.level} dBm"))
-                networkList.addView(row)
-                val gap = View(this).apply { layoutParams = LinearLayout.LayoutParams(1, dp(1)) }
-                networkList.addView(gap)
             }
         }
-        renderNetworks()
+
+        fun beginScan() {
+            if (checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+                requestPermissions(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION), 741)
+                return
+            }
+            val locationEnabled = if (Build.VERSION.SDK_INT >= 28) {
+                (getSystemService(LOCATION_SERVICE) as android.location.LocationManager).isLocationEnabled
+            } else true
+            if (!locationEnabled) {
+                renderNetworks("LOCATION OFF")
+                return
+            }
+            status.text = "SCANNING…"
+            try {
+                val started = wifi.startScan()
+                if (!started) renderNetworks("SCAN THROTTLED · SHOWING LAST RESULTS")
+            } catch (_: SecurityException) {
+                renderNetworks("SCAN PERMISSION DENIED")
+            } catch (_: Exception) {
+                renderNetworks("SCAN UNAVAILABLE")
+            }
+        }
 
         fun action(label: String, primary: Boolean = false, onClick: () -> Unit) =
             txt(12f, if (primary) p.cBg else p.cFg, label).apply {
@@ -2751,40 +2795,50 @@ class MainActivity : AppCompatActivity() {
             gravity = Gravity.END
             setPadding(0, dp(12), 0, 0)
         }
-        actions.addView(action("Refresh") {
-            if (checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-                requestPermissions(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION), 741)
-            } else {
-                try { wifi.startScan() } catch (_: Exception) {}
-                wifiDialog?.dismiss()
-                showWifiPanel()
-            }
-        }, LinearLayout.LayoutParams(-2, -2).apply { marginEnd = dp(8) })
+        actions.addView(action("Refresh") { beginScan() }, LinearLayout.LayoutParams(-2, -2).apply { marginEnd = dp(8) })
         actions.addView(action("Network settings", true) {
             wifiDialog?.dismiss()
             openSystem(Settings.ACTION_WIFI_SETTINGS)
         })
         root.addView(actions)
 
+        wifiDialog?.dismiss()
         wifiDialog = AlertDialog.Builder(this).create().apply {
             setView(root)
-            setOnDismissListener { wifiDialog = null }
+            setOnDismissListener {
+                wifiScanReceiver?.let { receiver -> try { unregisterReceiver(receiver) } catch (_: Exception) {} }
+                wifiScanReceiver = null
+                wifiNetworkList = null
+                wifiScanStatus = null
+                wifiDialog = null
+            }
             show()
             window?.setBackgroundDrawableResource(android.R.color.transparent)
             window?.setLayout(minOf(resources.displayMetrics.widthPixels - dp(40), dp(460)), -2)
         }
+        val receiver = object : android.content.BroadcastReceiver() {
+            override fun onReceive(context: Context?, intent: Intent?) {
+                if (intent?.action == WifiManager.SCAN_RESULTS_AVAILABLE_ACTION) {
+                    val updated = intent.getBooleanExtra(WifiManager.EXTRA_RESULTS_UPDATED, false)
+                    renderNetworks(if (updated) "SCAN COMPLETE" else "SCAN THROTTLED · LAST RESULTS")
+                }
+            }
+        }
+        wifiScanReceiver = receiver
+        try {
+            if (Build.VERSION.SDK_INT >= 33) registerReceiver(receiver, android.content.IntentFilter(WifiManager.SCAN_RESULTS_AVAILABLE_ACTION), Context.RECEIVER_NOT_EXPORTED)
+            else @Suppress("DEPRECATION") registerReceiver(receiver, android.content.IntentFilter(WifiManager.SCAN_RESULTS_AVAILABLE_ACTION))
+        } catch (_: Exception) {}
+        renderNetworks()
+        beginScan()
     }
 
     @Suppress("DEPRECATION")
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        if (requestCode == 741 && grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED) {
-            try {
-                val wifi = applicationContext.getSystemService(WIFI_SERVICE) as WifiManager
-                wifi.startScan()
-            } catch (_: Exception) {}
-            wifiDialog?.dismiss()
-            showWifiPanel()
+        if (requestCode == 741) {
+            if (grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED) showWifiPanel()
+            else wifiScanStatus?.text = "LOCATION PERMISSION DENIED"
         }
     }
 

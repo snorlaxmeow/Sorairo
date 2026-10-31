@@ -2723,11 +2723,11 @@ class MainActivity : AppCompatActivity() {
         }
         actions.addView(action("Refresh") {
             // Reopen the panel so the connection state is read again.
-            wifiDialog.dismiss()
+            wifiDialog?.dismiss()
             showWifiPanel()
         }, LinearLayout.LayoutParams(-2, -2).apply { marginEnd = dp(8) })
         actions.addView(action("Network settings", true) {
-            wifiDialog.dismiss()
+            wifiDialog?.dismiss()
             openSystem(Settings.ACTION_WIFI_SETTINGS)
         })
         root.addView(actions)

@@ -2663,12 +2663,10 @@ class MainActivity : AppCompatActivity() {
         showOverlay()
     }
 
-    @Suppress("DEPRECATION")
     private var wifiScanReceiver: android.content.BroadcastReceiver? = null
     private var wifiNetworkList: LinearLayout? = null
     private var wifiScanStatus: TextView? = null
 
-    @Suppress("DEPRECATION")
     @Suppress("DEPRECATION")
     private fun showWifiPanel() {
         val p = pal

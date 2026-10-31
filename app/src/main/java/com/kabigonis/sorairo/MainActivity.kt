@@ -3109,10 +3109,6 @@ class MainActivity : AppCompatActivity() {
             fillStyleSettings()
             setScroll.scrollTo(0, 0)
         }
-        row("permissions", "access & system settings ›") {
-            fillPermissionSettings()
-            setScroll.scrollTo(0, 0)
-        }
         row("pinned apps", "workspace ${curWs + 1} ›") {
             fillPinnedPicker(curWs); setScroll.scrollTo(0, 0)
         }
@@ -3121,8 +3117,9 @@ class MainActivity : AppCompatActivity() {
             try { startActivity(Intent(Settings.ACTION_HOME_SETTINGS)) }
             catch (_: Exception) { startActivity(Intent(Settings.ACTION_SETTINGS)) }
         }
-        row("media access", if (mediaAccess()) "granted" else "enable ›") {
-            openSystem(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)
+        row("perms", "access & system settings ›") {
+            fillPermissionSettings()
+            setScroll.scrollTo(0, 0)
         }
         row("vpn app", allApps.find { it.pkg == prefs.getString("vpn_pkg", null) }?.label ?: "choose ›") {
             fillVpnPicker(); setScroll.scrollTo(0, 0)

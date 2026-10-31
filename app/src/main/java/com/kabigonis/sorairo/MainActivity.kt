@@ -2653,6 +2653,97 @@ class MainActivity : AppCompatActivity() {
         showOverlay()
     }
 
+    private fun showWifiPanel() {
+        val p = pal
+        val wifi = applicationContext.getSystemService(WIFI_SERVICE) as WifiManager
+        val connected = netLabel().startsWith("wifi")
+        fun networkName(): String {
+            if (!connected) return "Not connected"
+            return try {
+                @Suppress("DEPRECATION")
+                val raw = wifi.connectionInfo.ssid
+                raw?.removePrefix("\"")?.removeSuffix("\"")
+                    ?.takeIf { it.isNotBlank() && it != "<unknown ssid>" }
+                    ?: "Connected network"
+            } catch (_: Exception) {
+                "Connected network"
+            }
+        }
+
+        val root = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(20), dp(18), dp(20), dp(14))
+            background = box(p.cBg, p.cDim, dp(18))
+        }
+        root.addView(txt(11f, p.cBlue, "~/network").apply {
+            setPadding(0, 0, 0, dp(5))
+        })
+        root.addView(txt(22f, p.cFg, "Wi-Fi").apply {
+            setPadding(0, 0, 0, dp(3))
+        })
+        root.addView(txt(12f, p.cDim, "NETWORK CONNECTIONS").apply {
+            setPadding(0, 0, 0, dp(14))
+        })
+
+        val connection = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(14), dp(14), dp(14), dp(14))
+            background = box(p.cSel, p.cAccent, dp(12))
+        }
+        val details = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        details.addView(txt(15f, p.cFg, networkName()))
+        details.addView(txt(11f, if (connected) p.cAccent else p.cDim,
+            if (connected) "connected · ${netLabel()}" else "not connected").apply {
+            setPadding(0, dp(4), 0, 0)
+        })
+        connection.addView(details, LinearLayout.LayoutParams(0, -2, 1f))
+        connection.addView(txt(20f, if (connected) p.cAccent else p.cDim,
+            if (connected) "●" else "○"))
+        root.addView(connection)
+
+        root.addView(txt(11f, p.cDim,
+            "Android manages Wi-Fi scanning and network credentials. Sorairo keeps those system actions available.")
+            .apply { setPadding(2, dp(12), 2, dp(14)) })
+
+        fun action(label: String, primary: Boolean = false, onClick: () -> Unit): TextView =
+            txt(13f, if (primary) p.cBg else p.cFg, label).apply {
+                gravity = Gravity.CENTER
+                setPadding(dp(14), dp(11), dp(14), dp(11))
+                background = box(
+                    if (primary) p.cAccent else p.cSel,
+                    if (primary) p.cAccent else p.cDim,
+                    dp(10)
+                )
+                setOnClickListener { onClick() }
+            }
+
+        val actions = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.END
+        }
+        actions.addView(action("Refresh") {
+            // Reopen the panel so the connection state is read again.
+            wifiDialog.dismiss()
+            showWifiPanel()
+        }, LinearLayout.LayoutParams(-2, -2).apply { marginEnd = dp(8) })
+        actions.addView(action("Network settings", true) {
+            wifiDialog.dismiss()
+            openSystem(Settings.ACTION_WIFI_SETTINGS)
+        })
+        root.addView(actions)
+
+        wifiDialog = AlertDialog.Builder(this).create().apply {
+            setView(root)
+            setOnDismissListener { wifiDialog = null }
+            show()
+            window?.setBackgroundDrawableResource(android.R.color.transparent)
+            window?.setLayout(minOf(resources.displayMetrics.widthPixels - dp(40), dp(460)), -2)
+        }
+    }
+
+    private var wifiDialog: AlertDialog? = null
+
     private fun fillQs() {
         val p = pal
         qsBox.removeAllViews()
@@ -2707,10 +2798,8 @@ class MainActivity : AppCompatActivity() {
         }
         val tiles = listOf(
             tile("wifi", if (wifiOn) net else "off", wifiOn) {
-                openSystem(
-                    if (Build.VERSION.SDK_INT >= 29) Settings.Panel.ACTION_INTERNET_CONNECTIVITY
-                    else Settings.ACTION_WIFI_SETTINGS
-                )
+                closeQs()
+                showWifiPanel()
             },
             tile("bluetooth", if (btOn) "on" else "off", btOn) {
                 openSystem(Settings.ACTION_BLUETOOTH_SETTINGS)

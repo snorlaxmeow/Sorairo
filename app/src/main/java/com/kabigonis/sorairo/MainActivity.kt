@@ -2673,7 +2673,7 @@ class MainActivity : AppCompatActivity() {
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(20), dp(18), dp(20), dp(14))
-            background = box(p.cBg, p.cDim, dp(18))
+            background = box(p.cBg, p.cDim).apply { cornerRadius = dp(18).toFloat() }
         }
         root.addView(txt(11f, p.cBlue, "~/network").apply {
             setPadding(0, 0, 0, dp(5))
@@ -2689,7 +2689,7 @@ class MainActivity : AppCompatActivity() {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
             setPadding(dp(14), dp(14), dp(14), dp(14))
-            background = box(p.cSel, p.cAccent, dp(12))
+            background = box(p.cSel, p.cAccent).apply { cornerRadius = dp(12).toFloat() }
         }
         val details = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         details.addView(txt(15f, p.cFg, networkName()))
@@ -2713,8 +2713,7 @@ class MainActivity : AppCompatActivity() {
                 background = box(
                     if (primary) p.cAccent else p.cSel,
                     if (primary) p.cAccent else p.cDim,
-                    dp(10)
-                )
+                ).apply { cornerRadius = dp(10).toFloat() }
                 setOnClickListener { onClick() }
             }
 

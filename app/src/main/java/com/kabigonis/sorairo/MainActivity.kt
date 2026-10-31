@@ -2876,6 +2876,8 @@ class MainActivity : AppCompatActivity() {
             } else {
                 wifiScanStatus?.text = "LOCATION PERMISSION DENIED"
             }
+        } else if (requestCode == 742 && permissionConfigOpen && settings.visibility == View.VISIBLE) {
+            fillPermissionSettings()
         }
     }
 
@@ -3243,7 +3245,7 @@ class MainActivity : AppCompatActivity() {
         ) {
             when {
                 !locationGranted -> requestPermissions(
-                    arrayOf(Manifest.permission.ACCESS_FINE_LOCATION), 741
+                    arrayOf(Manifest.permission.ACCESS_FINE_LOCATION), 742
                 )
                 !locationEnabled() -> try {
                     startActivity(Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS))

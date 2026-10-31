@@ -2827,7 +2827,7 @@ class MainActivity : AppCompatActivity() {
         wifiScanReceiver = receiver
         try {
             if (Build.VERSION.SDK_INT >= 33) registerReceiver(receiver, android.content.IntentFilter(WifiManager.SCAN_RESULTS_AVAILABLE_ACTION), Context.RECEIVER_NOT_EXPORTED)
-            else @Suppress("DEPRECATION") registerReceiver(receiver, android.content.IntentFilter(WifiManager.SCAN_RESULTS_AVAILABLE_ACTION))
+            else registerReceiver(receiver, android.content.IntentFilter(WifiManager.SCAN_RESULTS_AVAILABLE_ACTION))
         } catch (_: Exception) {}
         renderNetworks()
         beginScan()

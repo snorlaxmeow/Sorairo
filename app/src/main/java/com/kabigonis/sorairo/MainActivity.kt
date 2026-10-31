@@ -2663,6 +2663,7 @@ class MainActivity : AppCompatActivity() {
         showOverlay()
     }
 
+    @Suppress("DEPRECATION")
     private fun showWifiPanel() {
         val p = pal
         val wifi = applicationContext.getSystemService(WIFI_SERVICE) as WifiManager
@@ -2705,7 +2706,6 @@ class MainActivity : AppCompatActivity() {
                 return
             }
             val results = try {
-                @Suppress("DEPRECATION")
                 wifi.scanResults
             } catch (_: Exception) { emptyList<ScanResult>() }
             val unique = results.filter { it.SSID.isNotBlank() }.distinctBy { it.SSID }
@@ -2755,7 +2755,7 @@ class MainActivity : AppCompatActivity() {
             if (checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
                 requestPermissions(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION), 741)
             } else {
-                try { @Suppress("DEPRECATION") wifi.startScan() } catch (_: Exception) {}
+                try { wifi.startScan() } catch (_: Exception) {}
                 wifiDialog?.dismiss()
                 showWifiPanel()
             }
@@ -2775,12 +2775,12 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    @Suppress("DEPRECATION")
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (requestCode == 741 && grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED) {
             try {
                 val wifi = applicationContext.getSystemService(WIFI_SERVICE) as WifiManager
-                @Suppress("DEPRECATION")
                 wifi.startScan()
             } catch (_: Exception) {}
             wifiDialog?.dismiss()

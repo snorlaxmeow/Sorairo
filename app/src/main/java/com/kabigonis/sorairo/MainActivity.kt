@@ -413,6 +413,13 @@ class MainActivity : AppCompatActivity() {
 
     private val prefs by lazy { getSharedPreferences("launcher", MODE_PRIVATE) }
 
+    private val wifiPermissionLauncher =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+            if (granted) showWifiPanel() else
+                Toast.makeText(this, "Location permission is needed to list nearby Wi-Fi networks", Toast.LENGTH_LONG).show()
+        }
+
+
     private val pal: Pal get() = pals[prefs.getInt("theme", 0).coerceIn(0, pals.size - 1)]
     private val font: Typeface
         get() = Typeface.create(
@@ -2654,82 +2661,103 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showWifiPanel() {
+        if (ContextCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_FINE_LOCATION)
+            != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            wifiPermissionLauncher.launch(android.Manifest.permission.ACCESS_FINE_LOCATION)
+            return
+        }
+
         val p = pal
         val wifi = applicationContext.getSystemService(WIFI_SERVICE) as WifiManager
         val connected = netLabel().startsWith("wifi")
-        fun networkName(): String {
-            if (!connected) return "Not connected"
-            return try {
-                @Suppress("DEPRECATION")
-                val raw = wifi.connectionInfo.ssid
-                raw?.removePrefix("\"")?.removeSuffix("\"")
-                    ?.takeIf { it.isNotBlank() && it != "<unknown ssid>" }
-                    ?: "Connected network"
-            } catch (_: Exception) {
-                "Connected network"
-            }
-        }
+        val currentSsid = try {
+            @Suppress("DEPRECATION")
+            wifi.connectionInfo.ssid?.removePrefix("\\\"")?.removeSuffix("\\\"")
+        } catch (_: Exception) { null }
 
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(20), dp(18), dp(20), dp(14))
-            background = box(p.cBg, p.cDim).apply { cornerRadius = dp(18).toFloat() }
+            setPadding(dp(18), dp(16), dp(18), dp(14))
+            background = box(p.cBg, p.cDim)
         }
-        root.addView(txt(11f, p.cBlue, "~/network").apply {
-            setPadding(0, 0, 0, dp(5))
-        })
-        root.addView(txt(22f, p.cFg, "Wi-Fi").apply {
-            setPadding(0, 0, 0, dp(3))
-        })
-        root.addView(txt(12f, p.cDim, "NETWORK CONNECTIONS").apply {
-            setPadding(0, 0, 0, dp(14))
-        })
+        root.addView(txt(11f, p.cBlue, "~/network").apply { setPadding(0, 0, 0, dp(5)) })
+        root.addView(txt(22f, p.cFg, "Wi-Fi").apply { setPadding(0, 0, 0, dp(3)) })
+        root.addView(txt(11f, p.cDim, "AVAILABLE NETWORKS").apply { setPadding(0, 0, 0, dp(12)) })
 
-        val connection = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(14), dp(14), dp(14), dp(14))
-            background = box(p.cSel, p.cAccent).apply { cornerRadius = dp(12).toFloat() }
-        }
-        val details = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        details.addView(txt(15f, p.cFg, networkName()))
-        details.addView(txt(11f, if (connected) p.cAccent else p.cDim,
-            if (connected) "connected · ${netLabel()}" else "not connected").apply {
-            setPadding(0, dp(4), 0, 0)
-        })
-        connection.addView(details, LinearLayout.LayoutParams(0, -2, 1f))
-        connection.addView(txt(20f, if (connected) p.cAccent else p.cDim,
-            if (connected) "●" else "○"))
-        root.addView(connection)
-
-        root.addView(txt(11f, p.cDim,
-            "Android manages Wi-Fi scanning and network credentials. Sorairo keeps those system actions available.")
-            .apply { setPadding(2, dp(12), 2, dp(14)) })
-
-        fun action(label: String, primary: Boolean = false, onClick: () -> Unit): TextView =
-            txt(13f, if (primary) p.cBg else p.cFg, label).apply {
-                gravity = Gravity.CENTER
-                setPadding(dp(14), dp(11), dp(14), dp(11))
-                background = box(
-                    if (primary) p.cAccent else p.cSel,
-                    if (primary) p.cAccent else p.cDim,
-                ).apply { cornerRadius = dp(10).toFloat() }
-                setOnClickListener { onClick() }
+        fun networkRow(name: String, detail: String, active: Boolean, secured: Boolean) {
+            val row = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                setPadding(dp(10), dp(10), dp(10), dp(10))
+                background = if (active) box(p.cSel, p.cAccent) else box(p.cBg, p.cDim)
+                setOnClickListener {
+                    wifiDialog?.dismiss()
+                    openSystem(Settings.ACTION_WIFI_SETTINGS)
+                }
             }
+            val labels = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+            labels.addView(txt(14f, if (active) p.cAccent else p.cFg, name))
+            labels.addView(txt(10f, p.cDim, detail).apply { setPadding(0, dp(3), 0, 0) })
+            row.addView(labels, LinearLayout.LayoutParams(0, -2, 1f))
+            row.addView(txt(12f, p.cDim, if (active) "●" else if (secured) "▣" else "○"))
+            root.addView(row, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(6) })
+        }
+
+        if (!wifi.isWifiEnabled) {
+            root.addView(txt(13f, p.cDim, "Wi-Fi is turned off. Enable it in Android network settings.")
+                .apply { setPadding(0, dp(8), 0, dp(12)) })
+        } else {
+            val networks = try {
+                @Suppress("DEPRECATION")
+                wifi.scanResults
+                    .filter { it.SSID.isNotBlank() }
+                    .distinctBy { it.SSID }
+                    .sortedByDescending { it.level }
+            } catch (_: SecurityException) { emptyList() }
+
+            if (networks.isEmpty()) {
+                root.addView(txt(12f, p.cDim, "No scan results yet. Tap refresh to scan again.")
+                    .apply { setPadding(0, dp(8), 0, dp(12)) })
+            } else {
+                networks.take(8).forEach { result ->
+                    val active = result.SSID == currentSsid
+                    val secured = result.capabilities?.contains("WPA") == true ||
+                        result.capabilities?.contains("WEP") == true
+                    val strength = when {
+                        result.level >= -55 -> "excellent signal"
+                        result.level >= -67 -> "good signal"
+                        result.level >= -75 -> "fair signal"
+                        else -> "weak signal"
+                    }
+                    networkRow(result.SSID, (if (active) "connected · " else "") + strength, active, secured)
+                }
+            }
+        }
+
+        root.addView(txt(10f, p.cDim,
+            "Tap a network to manage or connect in Android settings. Location permission is required by Android to reveal nearby Wi-Fi scan results.")
+            .apply { setPadding(2, dp(8), 2, dp(12)) })
 
         val actions = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.END
         }
-        actions.addView(action("Refresh") {
-            // Reopen the panel so the connection state is read again.
+        fun action(label: String, primary: Boolean = false, onClick: () -> Unit) {
+            actions.addView(txt(12f, if (primary) p.cAccent else p.cDim, label).apply {
+                setPadding(dp(12), dp(10), dp(8), dp(10))
+                setOnClickListener { onClick() }
+            })
+        }
+        action("REFRESH") {
+            @Suppress("DEPRECATION")
+            wifi.startScan()
             wifiDialog?.dismiss()
-            showWifiPanel()
-        }, LinearLayout.LayoutParams(-2, -2).apply { marginEnd = dp(8) })
-        actions.addView(action("Network settings", true) {
+            handler.postDelayed({ showWifiPanel() }, 1200)
+        }
+        action("SETTINGS", true) {
             wifiDialog?.dismiss()
             openSystem(Settings.ACTION_WIFI_SETTINGS)
-        })
+        }
         root.addView(actions)
 
         wifiDialog = AlertDialog.Builder(this).create().apply {
@@ -2737,7 +2765,7 @@ class MainActivity : AppCompatActivity() {
             setOnDismissListener { wifiDialog = null }
             show()
             window?.setBackgroundDrawableResource(android.R.color.transparent)
-            window?.setLayout(minOf(resources.displayMetrics.widthPixels - dp(40), dp(460)), -2)
+            window?.setLayout(minOf(resources.displayMetrics.widthPixels - dp(40), dp(520)), -2)
         }
     }
 

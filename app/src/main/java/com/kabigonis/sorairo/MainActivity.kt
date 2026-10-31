@@ -2669,10 +2669,9 @@ class MainActivity : AppCompatActivity() {
 
         val p = pal
         val wifi = applicationContext.getSystemService(WIFI_SERVICE) as WifiManager
-        val connected = netLabel().startsWith("wifi")
         val currentSsid = try {
             @Suppress("DEPRECATION")
-            wifi.connectionInfo.ssid?.removePrefix("\\\"")?.removeSuffix("\\\"")
+            wifi.connectionInfo.ssid?.removePrefix("\"")?.removeSuffix("\"")
         } catch (_: Exception) { null }
 
         val root = LinearLayout(this).apply {
